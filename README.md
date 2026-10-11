@@ -14,7 +14,7 @@ The stack is made of two services defined in `docker-compose.yml`:
 Data flow:
 
 ```
-IoT devices / scripts  ──write──▶  InfluxDB (:8086)  ◀──query──  Grafana (:3000)  ──▶  your browser
+ESP32 + CO2 sensor  ──write──▶  InfluxDB (:8086)  ◀──query──  Grafana (:3000)  ──▶  your browser
 ```
 
 - On first start, InfluxDB is automatically initialized (`DOCKER_INFLUXDB_INIT_MODE=setup`) with the admin user, organization, bucket and API token defined in your `.env` file.
@@ -94,15 +94,70 @@ In Grafana, go to **Connections → Data sources → Add data source → InfluxD
 
 Then click **Save & test**.
 
-### Send data from a device
+### Send data manually
 
-Write a data point with the InfluxDB HTTP API (replace the values with those from your `.env`):
+To test without the ESP32, write a data point with the InfluxDB HTTP API (replace the values with those from your `.env`):
 
 ```bash
 curl --request POST \
   "http://localhost:8086/api/v2/write?org=lgk&bucket=sensors&precision=s" \
   --header "Authorization: Token <INFLUXDB_TOKEN>" \
   --data-raw "temperature,room=kitchen value=21.5"
+```
+
+## ESP32 CO2 sensor
+
+The `esp32-co2/` folder contains an Arduino sketch (`esp32-co2.ino`) that reads CO2 concentration (ppm) from an **MH-Z19B** sensor over UART and writes it to the `sensors` bucket of InfluxDB through the HTTP write API.
+
+- Measurement: `co2`
+- Tag: `device` (default `esp32-01`)
+- Field: `ppm` (integer)
+- Interval: every 30 seconds (`SEND_INTERVAL_MS`)
+
+No external Arduino library is required: the sketch only uses `WiFi.h` and `HTTPClient.h` from the ESP32 core.
+
+### Wiring
+
+| MH-Z19B | ESP32          |
+|---------|----------------|
+| Vin     | 5V             |
+| GND     | GND            |
+| Tx      | GPIO16 (RX2)   |
+| Rx      | GPIO17 (TX2)   |
+
+### Credentials (`secrets.h`)
+
+Wi-Fi and InfluxDB credentials are kept out of the sketch, in a `secrets.h` file that is listed in `.gitignore` and never committed.
+
+1. Copy the template:
+
+   ```bash
+   cp esp32-co2/secrets.h.example esp32-co2/secrets.h
+   ```
+
+2. Edit `esp32-co2/secrets.h`:
+
+   | Define            | Description                                                                                  |
+   |-------------------|----------------------------------------------------------------------------------------------|
+   | `WIFI_SSID`       | Wi-Fi network name                                                                           |
+   | `WIFI_PASSWORD`   | Wi-Fi password                                                                               |
+   | `INFLUXDB_URL`    | `http://<host-ip>:8086`, where `<host-ip>` is the machine running Docker Compose (not `localhost`) |
+   | `INFLUXDB_ORG`    | Same as `INFLUXDB_ORG` in `.env`                                                             |
+   | `INFLUXDB_BUCKET` | Same as `INFLUXDB_BUCKET` in `.env` (`sensors`)                                              |
+   | `INFLUXDB_TOKEN`  | Same as `INFLUXDB_TOKEN` in `.env`                                                           |
+
+### Flashing
+
+1. Install the [ESP32 board support](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html) in the Arduino IDE.
+2. Open `esp32-co2/esp32-co2.ino`, select your ESP32 board and port.
+3. Upload the sketch and open the Serial Monitor at **115200 baud** to follow the connection status and readings.
+
+Once data is flowing, query it in Grafana with Flux:
+
+```flux
+from(bucket: "sensors")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r._measurement == "co2" and r._field == "ppm")
 ```
 
 ## Stopping the stack
