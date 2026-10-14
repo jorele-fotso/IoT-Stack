@@ -1,5 +1,6 @@
 # IoT-Stack – Vitals & Air Monitoring (Old People)
 
+login:iotserver password:test..123
 Server side of our school IoT project (LGK, BTS Communication Technologies).
 An ESP32-S3 device monitors an elderly person's room; this repo receives, stores and displays its data with Docker.
 
