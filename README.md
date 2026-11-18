@@ -17,8 +17,8 @@ ESP32-S3 + sensors ──Wi-Fi──> Mosquitto (MQTT) ──> Telegraf ──> 
 |---|---|---|
 | InfluxDB | Stores the measurements | ✅ Running |
 | Grafana | Dashboard and alerts | ✅ Running |
-| Mosquitto | Receives the ESP32 messages (MQTT) | ⏳ To do |
-| Telegraf | Writes MQTT messages into InfluxDB | ⏳ To do |
+| Mosquitto | Receives the ESP32 messages (MQTT) | 🧪 Ready to test |
+| Telegraf | Writes MQTT messages into InfluxDB | 🧪 Ready to test |
 
 **Server:** unknown for now (tested on an Ubuntu Server VM).
 
@@ -26,7 +26,7 @@ ESP32-S3 + sensors ──Wi-Fi──> Mosquitto (MQTT) ──> Telegraf ──> 
 
 ```bash
 git clone https://github.com/jorele-fotso/IoT-Stack.git && cd IoT-Stack
-cp .env.example .env   # then set your own password and token
+cp .env.example .env   # then set your own passwords and token
 docker compose up -d
 ```
 
@@ -36,6 +36,10 @@ docker compose up -d
 |---|---|
 | InfluxDB | `http://<server-ip>:8086` |
 | Grafana | `http://<server-ip>:3000` (first login `admin` / `admin`) |
+| MQTT (ESP32) | `<server-ip>:1883` (user and password from `.env`) |
+
+**Test without hardware:** `python3 simulator/simulate.py` sends fake sensor data
+(needs `sudo apt install python3-paho-mqtt` once). Data format: topics `elderly/room1/<part>`, JSON numbers.
 
 ## Team
 

@@ -1,27 +1,67 @@
-    services:
-      influxdb:
-        image: influxdb:2
-        ports:
-          - "8086:8086"
-        volumes:
-          - influxdb-data:/var/lib/influxdb2
-        environment:
-          - DOCKER_INFLUXDB_INIT_MODE=setup
-          - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_USERNAME}
-          - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD}
-          - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
-          - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
-          - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
-        restart: unless-stopped
-      grafana:
-        image: grafana/grafana-oss
-        ports:
-          - "3000:3000"
-        volumes:
-          - grafana-data:/var/lib/grafana
-        depends_on:
-          - influxdb
-        restart: unless-stopped
+services:
+  influxdb:
+    image: influxdb:2
+    ports:
+      - "8086:8086"
     volumes:
-      influxdb-data:
-      grafana-data:
+      - influxdb-data:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - influxdb
+    restart: unless-stopped
+
+  # MQTT broker: receives the messages sent by the ESP32
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data:/mosquitto/data
+    environment:
+      - MQTT_DEVICE_USER=${MQTT_DEVICE_USER}
+      - MQTT_DEVICE_PASSWORD=${MQTT_DEVICE_PASSWORD}
+      - MQTT_TELEGRAF_USER=${MQTT_TELEGRAF_USER}
+      - MQTT_TELEGRAF_PASSWORD=${MQTT_TELEGRAF_PASSWORD}
+    # Create the password file from .env at each start, then run the broker
+    command: >
+      sh -c "mosquitto_passwd -c -b /mosquitto/data/passwd \"$$MQTT_DEVICE_USER\" \"$$MQTT_DEVICE_PASSWORD\" &&
+      mosquitto_passwd -b /mosquitto/data/passwd \"$$MQTT_TELEGRAF_USER\" \"$$MQTT_TELEGRAF_PASSWORD\" &&
+      chown mosquitto:mosquitto /mosquitto/data/passwd && chmod 0700 /mosquitto/data/passwd &&
+      exec mosquitto -c /mosquitto/config/mosquitto.conf"
+    restart: unless-stopped
+
+  # Copies every MQTT message into InfluxDB
+  telegraf:
+    image: telegraf:1.32
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    environment:
+      - MQTT_TELEGRAF_USER=${MQTT_TELEGRAF_USER}
+      - MQTT_TELEGRAF_PASSWORD=${MQTT_TELEGRAF_PASSWORD}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+    depends_on:
+      - influxdb
+      - mosquitto
+    restart: unless-stopped
+
+volumes:
+  influxdb-data:
+  grafana-data:
+  mosquitto-data:
